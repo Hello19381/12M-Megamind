@@ -16,4 +16,4 @@ _Linux_
 
 [https://pros.cs.purdue.edu/v5/getting-started/linux.html](url)
 
-# After downloading PROS, also get the PROS CLI extension in VS CODE
+_After downloading PROS, also get the PROS CLI extension in VS CODE_
