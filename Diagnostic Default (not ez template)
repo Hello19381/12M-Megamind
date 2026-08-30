@@ -1,0 +1,85 @@
+//  RUN  ON VS CODE WITH THE VEX EXTENSION
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/*    Module:       main.cpp                                                  */
+/*    Author:       a_mat                                                     */
+/*    Created:      8/30/2026, 3:42:57 PM                                     */
+/*    Description:  V5 project                                                */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+#include "vex.h"
+
+using namespace vex;
+
+// A global instance of vex::brain used for printing to the V5 brain screen
+vex::brain       Brain;
+
+// define your global instances of motors and other devices here
+controller Controller1 = controller(primary);
+
+motor LeftFront = motor(PORT1, ratio6_1, false);
+
+motor LeftBack = motor(PORT2, ratio6_1, false);
+
+motor RightFront = motor(PORT3, ratio6_1, true);
+
+motor RightBack = motor(PORT4, ratio6_1, true);
+
+int main() {
+    // set style of stopping
+    LeftFront.setStopping(coast);
+    LeftBack.setStopping(coast);
+    RightFront.setStopping(coast);
+    RightBack.setStopping(coast);
+    // set max torque
+    LeftFront.setMaxTorque(100, percent);
+    LeftBack.setMaxTorque(100, percent);
+    RightFront.setMaxTorque(100, percent);
+    RightBack.setMaxTorque(100, percent);
+
+    Brain.Screen.clearScreen();
+    Brain.Screen.setCursor(1,1);
+    Brain.Screen.print("LeftFront Motor Installed: %d", LeftFront.installed());
+    Brain.Screen.newLine();
+    Brain.Screen.print("LeftBack Motor Installed: %d", LeftBack.installed());
+    Brain.Screen.newLine();
+    Brain.Screen.print("RightFront Motor Installed: %d", RightFront.installed());
+    Brain.Screen.newLine();
+    Brain.Screen.print("RightBack Motor Installed: %d", RightBack.installed());
+
+    // Give yourself a few seconds to read the installed-check above
+    // before the loop starts overwriting the screen with joystick data
+    this_thread::sleep_for(3000);
+
+    while(true) {
+        int forwardSpeed = Controller1.Axis3.position();
+        int turn         = Controller1.Axis1.position();
+
+        int leftPower  = forwardSpeed + turn;
+        int rightPower = forwardSpeed - turn;
+
+        // ensure motor range
+        leftPower  = (leftPower > 100) ? 100 : (leftPower < -100 ? -100 : leftPower);
+        rightPower = (rightPower > 100) ? 100 : (rightPower < -100 ? -100 : rightPower);
+
+        // Print raw stick input and computed motor power, live
+        Brain.Screen.clearScreen();
+        Brain.Screen.setCursor(1, 1);
+        Brain.Screen.print("Axis3 (fwd): %d", forwardSpeed);
+        Brain.Screen.newLine();
+        Brain.Screen.print("Axis1 (turn): %d", turn);
+        Brain.Screen.newLine();
+        Brain.Screen.print("Left pwr: %d", leftPower);
+        Brain.Screen.newLine();
+        Brain.Screen.print("Right pwr: %d", rightPower);
+
+        LeftFront.spin(forward, leftPower, percent);
+        LeftBack.spin(forward, leftPower, percent);
+        RightFront.spin(forward, rightPower, percent);
+        RightBack.spin(forward, rightPower, percent);
+
+        // Allow other tasks to run
+        this_thread::sleep_for(10);
+    }
+}
