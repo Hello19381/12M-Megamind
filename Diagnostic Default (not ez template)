@@ -18,13 +18,15 @@ vex::brain       Brain;
 // define your global instances of motors and other devices here
 controller Controller1 = controller(primary);
 
-motor LeftFront = motor(PORT1, ratio6_1, false);
+motor LeftFront = motor(PORT1, ratio6_1, true);
 
-motor LeftBack = motor(PORT2, ratio6_1, false);
+motor LeftBack = motor(PORT2, ratio6_1, true);
 
 motor RightFront = motor(PORT3, ratio6_1, true);
 
 motor RightBack = motor(PORT4, ratio6_1, true);
+
+motor Intake = motor(PORT5, ratio18_1, false);
 
 int main() {
     // set style of stopping
@@ -32,12 +34,14 @@ int main() {
     LeftBack.setStopping(coast);
     RightFront.setStopping(coast);
     RightBack.setStopping(coast);
+    Intake.setStopping(coast);
     // set max torque
     LeftFront.setMaxTorque(100, percent);
     LeftBack.setMaxTorque(100, percent);
     RightFront.setMaxTorque(100, percent);
     RightBack.setMaxTorque(100, percent);
-
+    Intake.setMaxTorque(100, percent);
+    // screen diagnostics
     Brain.Screen.clearScreen();
     Brain.Screen.setCursor(1,1);
     Brain.Screen.print("LeftFront Motor Installed: %d", LeftFront.installed());
@@ -47,14 +51,55 @@ int main() {
     Brain.Screen.print("RightFront Motor Installed: %d", RightFront.installed());
     Brain.Screen.newLine();
     Brain.Screen.print("RightBack Motor Installed: %d", RightBack.installed());
+    Brain.Screen.newLine();
+    Brain.Screen.print("Intake Motor Installed: %d", Intake.installed());
+    Brain.Screen.newLine();
 
     // Give yourself a few seconds to read the installed-check above
     // before the loop starts overwriting the screen with joystick data
     this_thread::sleep_for(3000);
+    //toggle intake (outside of the loop)
+    int toggleMode = 0;
+    bool intakePressed = false;
+    bool intakePressedReverse = false;
+
 
     while(true) {
         int forwardSpeed = Controller1.Axis3.position();
         int turn         = Controller1.Axis1.position();
+
+        bool intakeButtonPressed = Controller1.ButtonR1.pressing();
+        bool intakeButtonPressedReverse = Controller1.ButtonR2.pressing();
+
+        if (intakeButtonPressed && !intakePressed) {
+            if (toggleMode == 1) {
+                toggleMode = 0;
+            } else {
+                toggleMode = 1;
+            }
+            intakePressed = true;
+        } else if (!intakeButtonPressed) {
+            intakePressed = false;
+        }
+
+        if (intakeButtonPressedReverse && !intakePressedReverse) {
+            if (toggleMode == 2) {
+                toggleMode = 0;
+            } else {
+                toggleMode = 2;
+            }
+            intakePressedReverse = true;
+        } else if (!intakeButtonPressedReverse) {
+            intakePressedReverse = false;
+        }
+
+        int intakeSpeed = 0;
+        if (toggleMode == 1) {
+            intakeSpeed = 100;
+        } else if (toggleMode == 2) {
+            intakeSpeed = -100;
+        }  
+
 
         int leftPower  = forwardSpeed + turn;
         int rightPower = forwardSpeed - turn;
@@ -78,7 +123,7 @@ int main() {
         LeftBack.spin(forward, leftPower, percent);
         RightFront.spin(forward, rightPower, percent);
         RightBack.spin(forward, rightPower, percent);
-
+        Intake.spin(forward, intakeSpeed, percent);
         // Allow other tasks to run
         this_thread::sleep_for(10);
     }
