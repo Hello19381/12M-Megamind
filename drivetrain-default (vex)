@@ -13,13 +13,12 @@
 
 using namespace vex;
 
-// Creates the V5 Brain object so the program can use the Brain screen.
 vex::brain Brain;
 
 // Creates the primary controller used for all driver controls.
 controller Controller1 = controller(primary);
 
-// Defines the four drivetrain motors and reverses the right side so all four motors move the robot forward when given a forward command.
+// Defines the four drivetrain motors and reverses the right side so all four motors move the robot forward together.
 motor LeftFront = motor(PORT1, ratio6_1, false);
 motor LeftBack = motor(PORT2, ratio6_1, false);
 motor RightFront = motor(PORT3, ratio6_1, true);
@@ -28,7 +27,7 @@ motor RightBack = motor(PORT4, ratio6_1, true);
 // Defines the intake motor on port 5.
 motor Intake = motor(PORT5, ratio6_1, false);
 
-// Ignores joystick values smaller than 5 so small controller stick drift does not cause the robot to move.
+// Ignores joystick values smaller than 5 so small controller stick drift does not move the robot.
 const int DRIVE_DEADBAND = 5;
 
 // Sets the maximum drive power when precision mode is off.
@@ -37,8 +36,11 @@ const int NORMAL_SPEED = 100;
 // Sets the maximum drive power when precision mode is on.
 const int PRECISION_SPEED = 60;
 
-// Controls how often the Brain diagnostics are refreshed.
+// Sets how often the Brain diagnostics are refreshed.
 const int SCREEN_UPDATE_TIME = 200;
+
+// Sets the intake speed in RPM.
+const int INTAKE_SPEED = 480;
 
 // Stores the three possible states of the intake.
 enum IntakeState {
@@ -77,20 +79,20 @@ void configureMotors() {
 
 
 // Converts the forward and turning controller inputs into left and right motor powers using split arcade drive.
-void drive(int forward, int turn) {
+void drive(int forwardInput, int turnInput) {
 
     // Changes small joystick values to zero so controller drift does not move the robot.
-    if (abs(forward) < DRIVE_DEADBAND) {
-        forward = 0;
+    if (abs(forwardInput) < DRIVE_DEADBAND) {
+        forwardInput = 0;
     }
 
-    if (abs(turn) < DRIVE_DEADBAND) {
-        turn = 0;
+    if (abs(turnInput) < DRIVE_DEADBAND) {
+        turnInput = 0;
     }
 
     // Adds the turning input to the left side and subtracts it from the right side to turn the robot.
-    int leftPower = forward + turn;
-    int rightPower = forward - turn;
+    int leftPower = forwardInput + turnInput;
+    int rightPower = forwardInput - turnInput;
 
     // Prevents the calculated motor powers from going outside the -100% to 100% range.
     leftPower = clamp(leftPower, -100, 100);
@@ -152,13 +154,13 @@ void intakeControl() {
         intakeReversePressed = false;
     }
 
-    // Runs the intake forward when the current state is forward.
+    // Runs the intake forward at 480 RPM when the current state is forward.
     if (intakeState == INTAKE_FORWARD) {
-        Intake.spin(forward, 100, percent);
+        Intake.spin(forward, INTAKE_SPEED, rpm);
     }
-    // Runs the intake backward when the current state is reverse.
+    // Runs the intake backward at 480 RPM when the current state is reverse.
     else if (intakeState == INTAKE_REVERSE) {
-        Intake.spin(forward, -100, percent);
+        Intake.spin(reverse, INTAKE_SPEED, rpm);
     }
     // Stops the intake when the current state is off.
     else {
@@ -168,7 +170,7 @@ void intakeControl() {
 
 
 // Updates the Brain screen with drive and intake information without refreshing the screen every loop.
-void updateDiagnostics(int forward, int turn, int leftPower, int rightPower) {
+void updateDiagnostics(int forwardInput, int turnInput, int leftPower, int rightPower) {
 
     // Keeps track of how much time has passed since the last screen update.
     static int screenTimer = 0;
@@ -185,10 +187,10 @@ void updateDiagnostics(int forward, int turn, int leftPower, int rightPower) {
     Brain.Screen.clearScreen();
     Brain.Screen.setCursor(1, 1);
 
-    Brain.Screen.print("Forward: %d", forward);
+    Brain.Screen.print("Forward: %d", forwardInput);
     Brain.Screen.newLine();
 
-    Brain.Screen.print("Turn: %d", turn);
+    Brain.Screen.print("Turn: %d", turnInput);
     Brain.Screen.newLine();
 
     Brain.Screen.print("Left Power: %d", leftPower);
@@ -199,10 +201,10 @@ void updateDiagnostics(int forward, int turn, int leftPower, int rightPower) {
 
     // Shows the intake state so we can see what the program thinks the intake is doing.
     if (intakeState == INTAKE_FORWARD) {
-        Brain.Screen.print("Intake: FORWARD");
+        Brain.Screen.print("Intake: FORWARD 480 RPM");
     }
     else if (intakeState == INTAKE_REVERSE) {
-        Brain.Screen.print("Intake: REVERSE");
+        Brain.Screen.print("Intake: REVERSE 480 RPM");
     }
     else {
         Brain.Screen.print("Intake: OFF");
@@ -284,7 +286,12 @@ int main() {
         intakeControl();
 
         // Updates the Brain diagnostics.
-        updateDiagnostics(forwardSpeed, turn, leftPower, rightPower);
+        updateDiagnostics(
+            forwardSpeed,
+            turn,
+            leftPower,
+            rightPower
+        );
 
         // Runs the control loop every 10 milliseconds so the robot responds quickly to controller input.
         this_thread::sleep_for(10);
