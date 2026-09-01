@@ -18,15 +18,15 @@ vex::brain       Brain;
 // define your global instances of motors and other devices here
 controller Controller1 = controller(primary);
 
-motor LeftFront = motor(PORT1, ratio6_1, true);
+motor LeftFront = motor(PORT1, ratio6_1, false);
 
-motor LeftBack = motor(PORT2, ratio6_1, true);
+motor LeftBack = motor(PORT2, ratio6_1, false);
 
 motor RightFront = motor(PORT3, ratio6_1, true);
 
 motor RightBack = motor(PORT4, ratio6_1, true);
 
-motor Intake = motor(PORT5, ratio18_1, false);
+motor Intake = motor(PORT5, ratio6_1, false);
 
 int main() {
     // set style of stopping
