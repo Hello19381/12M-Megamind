@@ -1,0 +1,299 @@
+// RUN ON VS CODE WITH THE VEX EXTENSION
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/*    Module:       main.cpp                                                  */
+/*    Author:       a_mat                                                     */
+/*    Created:      8/30/2026                                                 */
+/*    Description:  V5 project                                                */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+#include "vex.h"
+
+using namespace vex;
+
+vex::brain Brain;
+
+// Creates the primary controller used for all driver controls.
+controller Controller1 = controller(primary);
+
+// Defines the four drivetrain motors and reverses the right side so all four motors move the robot forward together.
+motor LeftFront = motor(PORT1, ratio6_1, false);
+motor LeftBack = motor(PORT2, ratio6_1, false);
+motor RightFront = motor(PORT3, ratio6_1, true);
+motor RightBack = motor(PORT4, ratio6_1, true);
+
+// Defines the intake motor on port 5.
+motor Intake = motor(PORT5, ratio6_1, false);
+
+// Ignores joystick values smaller than 5 so small controller stick drift does not move the robot.
+const int DRIVE_DEADBAND = 5;
+
+// Sets the maximum drive power when precision mode is off.
+const int NORMAL_SPEED = 100;
+
+// Sets the maximum drive power when precision mode is on.
+const int PRECISION_SPEED = 60;
+
+// Sets how often the Brain diagnostics are refreshed.
+const int SCREEN_UPDATE_TIME = 200;
+
+// Sets the intake speed in RPM.
+const int INTAKE_SPEED = 480;
+
+// Stores the three possible states of the intake.
+enum IntakeState {
+    INTAKE_OFF,
+    INTAKE_FORWARD,
+    INTAKE_REVERSE
+};
+
+// Starts the intake turned off when the program begins.
+IntakeState intakeState = INTAKE_OFF;
+
+
+// Keeps a number inside a specific range so motor power cannot go above 100% or below -100%.
+int clamp(int value, int minimum, int maximum) {
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+
+    return value;
+}
+
+
+// Sets the stopping mode and maximum torque for every motor before the robot starts.
+void configureMotors() {
+    LeftFront.setStopping(coast);
+    LeftBack.setStopping(coast);
+    RightFront.setStopping(coast);
+    RightBack.setStopping(coast);
+    Intake.setStopping(coast);
+
+    LeftFront.setMaxTorque(100, percent);
+    LeftBack.setMaxTorque(100, percent);
+    RightFront.setMaxTorque(100, percent);
+    RightBack.setMaxTorque(100, percent);
+    Intake.setMaxTorque(100, percent);
+}
+
+
+// Converts the forward and turning controller inputs into left and right motor powers using split arcade drive.
+void drive(int forwardInput, int turnInput) {
+
+    // Changes small joystick values to zero so controller drift does not move the robot.
+    if (abs(forwardInput) < DRIVE_DEADBAND) {
+        forwardInput = 0;
+    }
+
+    if (abs(turnInput) < DRIVE_DEADBAND) {
+        turnInput = 0;
+    }
+
+    // Adds the turning input to the left side and subtracts it from the right side to turn the robot.
+    int leftPower = forwardInput + turnInput;
+    int rightPower = forwardInput - turnInput;
+
+    // Prevents the calculated motor powers from going outside the -100% to 100% range.
+    leftPower = clamp(leftPower, -100, 100);
+    rightPower = clamp(rightPower, -100, 100);
+
+    // Sends the calculated power to both motors on the left side.
+    LeftFront.spin(forward, leftPower, percent);
+    LeftBack.spin(forward, leftPower, percent);
+
+    // Sends the calculated power to both motors on the right side.
+    RightFront.spin(forward, rightPower, percent);
+    RightBack.spin(forward, rightPower, percent);
+}
+
+
+// Checks R1 and R2 and changes the intake state only when a button is newly pressed.
+void intakeControl() {
+
+    // These remember whether R1 and R2 were pressed during the previous loop so the program can detect a new press.
+    static bool intakePressed = false;
+    static bool intakeReversePressed = false;
+
+    bool intakeButton = Controller1.ButtonR1.pressing();
+    bool intakeReverseButton = Controller1.ButtonR2.pressing();
+
+    // R1 turns the intake forward, or turns it off if it is already running forward.
+    if (intakeButton && !intakePressed) {
+
+        if (intakeState == INTAKE_FORWARD) {
+            intakeState = INTAKE_OFF;
+        }
+        else {
+            intakeState = INTAKE_FORWARD;
+        }
+
+        intakePressed = true;
+    }
+
+    // Resets the R1 press detector after the button is released so it can be pressed again.
+    if (!intakeButton) {
+        intakePressed = false;
+    }
+
+    // R2 turns the intake in reverse, or turns it off if it is already running reverse.
+    if (intakeReverseButton && !intakeReversePressed) {
+
+        if (intakeState == INTAKE_REVERSE) {
+            intakeState = INTAKE_OFF;
+        }
+        else {
+            intakeState = INTAKE_REVERSE;
+        }
+
+        intakeReversePressed = true;
+    }
+
+    // Resets the R2 press detector after the button is released so it can be pressed again.
+    if (!intakeReverseButton) {
+        intakeReversePressed = false;
+    }
+
+    // Runs the intake forward at 480 RPM when the current state is forward.
+    if (intakeState == INTAKE_FORWARD) {
+        Intake.spin(forward, INTAKE_SPEED, rpm);
+    }
+    // Runs the intake backward at 480 RPM when the current state is reverse.
+    else if (intakeState == INTAKE_REVERSE) {
+        Intake.spin(reverse, INTAKE_SPEED, rpm);
+    }
+    // Stops the intake when the current state is off.
+    else {
+        Intake.stop();
+    }
+}
+
+
+// Updates the Brain screen with drive and intake information without refreshing the screen every loop.
+void updateDiagnostics(int forwardInput, int turnInput, int leftPower, int rightPower) {
+
+    // Keeps track of how much time has passed since the last screen update.
+    static int screenTimer = 0;
+
+    screenTimer += 10;
+
+    // Waits until 200 milliseconds have passed before updating the screen again.
+    if (screenTimer < SCREEN_UPDATE_TIME) {
+        return;
+    }
+
+    screenTimer = 0;
+
+    Brain.Screen.clearScreen();
+    Brain.Screen.setCursor(1, 1);
+
+    Brain.Screen.print("Forward: %d", forwardInput);
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("Turn: %d", turnInput);
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("Left Power: %d", leftPower);
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("Right Power: %d", rightPower);
+    Brain.Screen.newLine();
+
+    // Shows the intake state so we can see what the program thinks the intake is doing.
+    if (intakeState == INTAKE_FORWARD) {
+        Brain.Screen.print("Intake: FORWARD 480 RPM");
+    }
+    else if (intakeState == INTAKE_REVERSE) {
+        Brain.Screen.print("Intake: REVERSE 480 RPM");
+    }
+    else {
+        Brain.Screen.print("Intake: OFF");
+    }
+}
+
+
+int main() {
+
+    // Applies the motor settings before the robot begins responding to controller input.
+    configureMotors();
+
+    // Checks each motor connection and displays the results before driver control starts.
+    Brain.Screen.clearScreen();
+    Brain.Screen.setCursor(1, 1);
+
+    Brain.Screen.print("LeftFront: %d", LeftFront.installed());
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("LeftBack: %d", LeftBack.installed());
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("RightFront: %d", RightFront.installed());
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("RightBack: %d", RightBack.installed());
+    Brain.Screen.newLine();
+
+    Brain.Screen.print("Intake: %d", Intake.installed());
+
+    // Keeps the motor diagnostic screen visible for three seconds so the connections can be checked.
+    this_thread::sleep_for(3000);
+
+    // Starts precision mode disabled so the robot initially has its full driving speed.
+    bool precisionMode = false;
+
+    // Remembers whether the Down button was already pressed so holding it does not repeatedly change the speed mode.
+    bool speedButtonPressed = false;
+
+    while (true) {
+
+        // Reads the forward/backward and turning positions from the controller.
+        int forwardSpeed = Controller1.Axis3.position();
+        int turn = Controller1.Axis1.position();
+
+        // Reads whether the Down button is currently being pressed.
+        bool speedButton = Controller1.ButtonDown.pressing();
+
+        // Toggles precision mode once when the Down button is first pressed.
+        if (speedButton && !speedButtonPressed) {
+            precisionMode = !precisionMode;
+            speedButtonPressed = true;
+        }
+
+        // Allows the Down button to trigger another toggle after it is released.
+        if (!speedButton) {
+            speedButtonPressed = false;
+        }
+
+        // Uses either the normal speed limit or the precision speed limit.
+        int speedLimit = precisionMode ? PRECISION_SPEED : NORMAL_SPEED;
+
+        // Scales the joystick inputs so precision mode reduces the maximum drive speed.
+        forwardSpeed = (forwardSpeed * speedLimit) / 100;
+        turn = (turn * speedLimit) / 100;
+
+        // Calculates the motor powers so the Brain can display the same values being sent to the drivetrain.
+        int leftPower = forwardSpeed + turn;
+        int rightPower = forwardSpeed - turn;
+
+        // Keeps the displayed motor powers inside the actual motor power range.
+        leftPower = clamp(leftPower, -100, 100);
+        rightPower = clamp(rightPower, -100, 100);
+
+        // Sends the controller inputs to the split arcade drivetrain.
+        drive(forwardSpeed, turn);
+
+        // Updates the intake based on the current R1 and R2 state.
+        intakeControl();
+
+        // Updates the Brain diagnostics.
+        updateDiagnostics(
+            forwardSpeed,
+            turn,
+            leftPower,
+            rightPower
+        );
+
+        // Runs the control loop every 10 milliseconds so the robot responds quickly to controller input.
+        this_thread::sleep_for(10);
+    }
+}
