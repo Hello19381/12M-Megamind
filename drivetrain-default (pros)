@@ -18,6 +18,7 @@ pros::Motor intake(-5);
 pros::Motor claw_spin(-7);
 pros::Motor cascade_left(19);
 pros::Motor cascade_right(-20);
+pros::Motor wrist(11);
 
 /**
  * Runs initialization code.
@@ -179,6 +180,16 @@ void opcontrol() {
     else {
       cascade_left.brake();
       cascade_right.brake();
+    }
+    // Wrist
+    if (master.get_digital(DIGITAL_DOWN)) {
+      wrist.move(127);
+    }
+    else if(master.get_digital(DIGITAL_UP)) {
+      wrist.move(-127);
+    }
+    else {
+      wrist.brake();
     }
 
     // Intake
