@@ -1,23 +1,31 @@
 #include "main.h"
 
-/////
-// For installation, upgrading, documentations, and tutorials, check out our website!
-// https://ez-robotics.github.io/EZ-Template/
-/////
-
 // Chassis constructor
 ez::Drive chassis(
     {-1, -2},     // Left Chassis Ports
     {3, 4},       // Right Chassis Ports
-    7,             // IMU Port
-    2.75,          // Wheel Diameter
-    480);          // Wheel RPM
+    7,            // IMU Port
+    2.75,         // Wheel Diameter
+    480);         // Wheel RPM
 
-// Mechanism motors
-pros::Motor intake(-5);
-pros::Motor claw_spin(-7);
+// Cascade motors
 pros::Motor cascade_left(19);
 pros::Motor cascade_right(-20);
+
+// Intake motors
+pros::Motor intake(-5);
+pros::Motor claw_spin(-7);
+
+// Wrist motor
+pros::Motor wrist(11);
+
+// Intake toggle
+bool intake_on = false;
+bool intake_reverse = false;
+
+// Wrist hold
+double wrist_target = 0;
+bool wrist_was_pressed = false;
 
 /**
  * Runs initialization code.
@@ -38,7 +46,7 @@ void initialize() {
       {"Turn\n\nTurn 3 times.", turn_example},
       {"Drive and Turn\n\nDrive forward, turn, come back", drive_and_turn},
       {"Drive and Turn\n\nSlow down during drive", wait_until_change_speed},
-      {"Swing Turn\n\nSlow down during drive", swing_example},
+      {"Swing Turn\n\nSwing in an 'S' curve", swing_example},
       {"Motion Chaining\n\nDrive forward, turn, and come back, but blend everything together :D", motion_chaining},
       {"Combine all 3 movements", combining_movements},
       {"Interference\n\nAfter driving forward, robot performs differently if interfered or not", interfered_example},
@@ -52,8 +60,9 @@ void initialize() {
 
   chassis.initialize();
   ez::as::initialize();
-
   master.rumble(chassis.drive_imu_calibrated() ? "." : "---");
+
+  wrist_target = wrist.get_position();
 }
 
 void disabled() {
@@ -81,14 +90,8 @@ void screen_print_tracker(ez::tracking_wheel *tracker, std::string name, int lin
   std::string tracker_value = "", tracker_width = "";
 
   if (tracker != nullptr) {
-    tracker_value =
-        name + " tracker: " +
-        util::to_string_with_precision(tracker->get());
-
-    tracker_width =
-        "  width: " +
-        util::to_string_with_precision(
-            tracker->distance_to_center_get());
+    tracker_value = name + " tracker: " + util::to_string_with_precision(tracker->get());
+    tracker_width = "  width: " + util::to_string_with_precision(tracker->distance_to_center_get());
   }
 
   ez::screen_print(tracker_value + tracker_width, line);
@@ -102,11 +105,10 @@ void ez_screen_task() {
     if (!pros::competition::is_connected()) {
       if (chassis.odom_enabled() && !chassis.pid_tuner_enabled()) {
         if (ez::as::page_blank_is_on(0)) {
-          ez::screen_print(
-              "x: " + util::to_string_with_precision(chassis.odom_x_get()) +
-              "\ny: " + util::to_string_with_precision(chassis.odom_y_get()) +
-              "\na: " + util::to_string_with_precision(chassis.odom_theta_get()),
-              1);
+          ez::screen_print("x: " + util::to_string_with_precision(chassis.odom_x_get()) +
+                               "\ny: " + util::to_string_with_precision(chassis.odom_y_get()) +
+                               "\na: " + util::to_string_with_precision(chassis.odom_theta_get()),
+                           1);
 
           screen_print_tracker(chassis.odom_tracker_left, "l", 4);
           screen_print_tracker(chassis.odom_tracker_right, "r", 5);
@@ -134,14 +136,9 @@ void ez_template_extras() {
     if (master.get_digital_new_press(DIGITAL_X))
       chassis.pid_tuner_toggle();
 
-    if (master.get_digital(DIGITAL_B) &&
-        master.get_digital(DIGITAL_DOWN)) {
-
-      pros::motor_brake_mode_e_t preference =
-          chassis.drive_brake_get();
-
+    if (master.get_digital(DIGITAL_B) && master.get_digital(DIGITAL_DOWN)) {
+      pros::motor_brake_mode_e_t preference = chassis.drive_brake_get();
       autonomous();
-
       chassis.drive_brake_set(preference);
     }
 
@@ -166,15 +163,13 @@ void opcontrol() {
     chassis.opcontrol_arcade_standard(ez::SPLIT);
 
     // Cascade
-    // L1 = move up
-    // L2 = move down
     if (master.get_digital(DIGITAL_L1)) {
-      cascade_left.move(100);
-      cascade_right.move(100);
+      cascade_left.move(127);
+      cascade_right.move(127);
     }
     else if (master.get_digital(DIGITAL_L2)) {
-      cascade_left.move(-100);
-      cascade_right.move(-100);
+      cascade_left.move(127);
+      cascade_right.move(127);
     }
     else {
       cascade_left.brake();
@@ -182,20 +177,64 @@ void opcontrol() {
     }
 
     // Intake
-    // R1 = forward
-    // R2 = reverse
-    if (master.get_digital(DIGITAL_R1)) {
-      intake.move(127);
-      claw_spin.move(127);
+    if (master.get_digital_new_press(DIGITAL_R1)) {
+      if (intake_on && intake_reverse) {
+        intake_on = false;
+      }
+      else {
+        intake_on = true;
+        intake_reverse = true;
+      }
     }
-    else if (master.get_digital(DIGITAL_R2)) {
-      intake.move(-127);
-      claw_spin.move(-127);
+
+    if (master.get_digital_new_press(DIGITAL_R2)) {
+      if (intake_on && !intake_reverse) {
+        intake_on = false;
+      }
+      else {
+        intake_on = true;
+        intake_reverse = false;
+      }
+    }
+
+    if (intake_on) {
+      if (intake_reverse) {
+        intake.move(127);
+        claw_spin.move(127);
+      }
+      else {
+        intake.move(-127);
+        claw_spin.move(-127);
+      }
     }
     else {
       intake.brake();
       claw_spin.brake();
     }
+
+    // Wrist
+    bool wrist_pressed_down = master.get_digital(DIGITAL_DOWN);
+    bool wrist_pressed_up = master.get_digital(DIGITAL_UP);
+
+    if (wrist_pressed_down) {
+      // DOWN now does what UP previously did
+      wrist.move(127);
+    }
+    else if (wrist_pressed_up) {
+      // UP now does what DOWN previously did
+      wrist.move(-127);
+    }
+    else {
+      // Capture the position once when the button is released
+      if (wrist_was_pressed) {
+        wrist_target = wrist.get_position();
+      }
+
+      // Hold that position against gravity
+      wrist.move_absolute(wrist_target, 127);
+    }
+
+    wrist_was_pressed = wrist_pressed_down || wrist_pressed_up;
 
     pros::delay(ez::util::DELAY_TIME);
   }
