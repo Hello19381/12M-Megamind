@@ -84,7 +84,17 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {}
+void autonomous() {
+    //EXAPMLE AUTONS -- James if you need a base this is basic moving code
+    chassis.setPose(0,0,0); //Setting position, making it start at the center of a y axis
+    //This makes all movement relative to the y and x axis
+    chassis.moveToPose(0,55,0,3000);// first # is x, 2nd is y, third is angle
+    pros::delay(2000); //Delay for testing clarity
+    chassis.moveToPose(0,55,180,2000);
+    pros::delay(2000);
+    chassis.moveToPose(25, 55, 180, 3000);
+    // Should move forward, turn right, and move a bit right in the end
+}
 
 /**
  * Runs the operator control code. This function will be started in its own task
