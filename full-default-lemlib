@@ -3,18 +3,17 @@
 #include "api.h"
 #include "pros/adi.hpp"
 #include "pros/misc.h"
-// drive motors — replace port numbers with your real ones (negative = reversed)
 pros::MotorGroup left_motors({-1, -2}, pros::MotorGears::blue);
 pros::MotorGroup right_motors({3, 4}, pros::MotorGears::blue);
 pros::MotorGroup cascades({19, -20}, pros::MotorGears::blue);
-pros::Motor claw(11, pros::MotorGears::blue);
-pros::MotorGroup intake_and_wrist({5, 7}, pros::MotorGears::blue);
+pros::Motor wrist(11, pros::MotorGears::blue);
+pros::MotorGroup intake_and_claw({5, 7}, pros::MotorGears::blue);
 //pros::Imu imu(15);
 lemlib::OdomSensors sensors(nullptr, nullptr, nullptr, nullptr, nullptr);
 // drivetrain settings
 lemlib::Drivetrain drivetrain(&left_motors,
                                &right_motors,
-                               9, // track width in inches
+                               10, // track width in inches
                                lemlib::Omniwheel::NEW_275, // <-- wheel diameter goes HERE
                                600, // drivetrain rpm (6:1 blue = 600rpm)
                                2 // horizontal drift
@@ -31,13 +30,13 @@ lemlib::Chassis chassis(drivetrain, lateral_controller, angular_controller, sens
  * "I was pressed!" and nothing.
  */
 //void on_center_button() {
-	//static bool pressed = false;
-	//pressed = !pressed;
-	//if (pressed) {
-	//	pros::lcd::set_text(2, "I was pressed!");
-	//} else {
-	//	pros::lcd::clear_line(2);
-	//}
+    //static bool pressed = false;
+    //pressed = !pressed;
+    //if (pressed) {
+    //  pros::lcd::set_text(2, "I was pressed!");
+    //} else {
+    //  pros::lcd::clear_line(2);
+    //}
 //}
 /**
  * Runs initialization code. This occurs as soon as the program is started.
@@ -49,10 +48,13 @@ void on_center_button() {
     // ... some code
 }
 void initialize() {
-	pros::lcd::initialize();
-	pros::lcd::set_text(1, "Hello PROS User!");
-	chassis.calibrate();
-	pros::lcd::register_btn1_cb(on_center_button);
+    pros::lcd::initialize();
+    pros::lcd::set_text(1, "Hello PROS User!");
+    chassis.calibrate();
+    pros::lcd::register_btn1_cb(on_center_button);
+    //sets it so that when you hold the cascade it doesnt fall immediately
+    cascades.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 }
 
 /**
@@ -84,17 +86,7 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {
-    //EXAPMLE AUTONS -- James if you need a base this is basic moving code
-    chassis.setPose(0,0,0); //Setting position, making it start at the center of a y axis
-    //This makes all movement relative to the y and x axis
-    chassis.moveToPose(0,55,0,3000);// first # is x, 2nd is y, third is angle
-    pros::delay(2000); //Delay for testing clarity
-    chassis.moveToPose(0,55,180,2000);
-    pros::delay(2000);
-    chassis.moveToPose(25, 55, 180, 3000);
-    // Should move forward, turn right, and move a bit right in the end
-}
+void autonomous() {}
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -113,22 +105,50 @@ void opcontrol() {
     pros::Controller controller(pros::E_CONTROLLER_MASTER);
     bool intakeOn = false; // tracks whether the intake is toggled on
     bool intakeOut = false; // tracks whether the outtake is toggled on
+    bool wasDownPressed = false; // tracks button state for release detection 
+    bool wasBPressed = false; // tracks button state for release detection
+    int wristStage = 0; // 0 = down, 1 = up, 2 = further up
     while (true) {
         // drivetrain — split arcade
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         chassis.arcade(leftY, rightX);
-        //cascade down is set to the down arrow
+        //defining button inputs
+        #include <algorithm>  // for std::clamp
+
+        const double MAX_POS   = 900.0;  // degrees at the end of travel (tune this)
+        const double MIN_SPEED = 0.1;    // fraction of full speed at the end (0.4 = 40%)
+
+        // in initialize():
+        wrist.set_encoder_units(pros::E_MOTOR_ENCODER_DEGREES);
+        wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+        wrist.tare_position();  // treat the starting position as 0
+
+        // in your control loop:
+        double t = std::clamp(wrist.get_position() / MAX_POS, 0.0, 1.0);
+        double scale = 0.5 - t * (0.5 - MIN_SPEED);  // 1.0 at start, MIN_SPEED at end
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+            wrist.move(127 * scale);   // cascade up
+        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
+            wrist.move(-80 * scale);  // cascade down
+        } else {
+            wrist.brake();
+}
+        // if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+        //     wrist.move(127); // wrist up
+        // } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
+        //     wrist.move(-100); // wrist down
+        // } else {
+        // wrist.brake();
+        // }
+        //cascade
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-            cascades.move(-127);
+            cascades.move(-127); // cascade up
+        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+            cascades.move(100); // cascade down
         } else {
-            cascades.move(0);
-        }
-        // cascade up is set to L2
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-            cascades.move(127);
-        } else {
-            cascades.move(0);
+        cascades.move(0);
         }
         // intake — toggle on R1, outtake — toggle on R2
         if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
@@ -139,28 +159,27 @@ void opcontrol() {
             intakeOut = !intakeOut;
             intakeOn = false; // turning outtake on cancels intake
         }
-
         if (intakeOn) {
-            intake_and_wrist.move(127);
+            intake_and_claw.move(127);
         } else if (intakeOut) {
-            intake_and_wrist.move(-127);
+            intake_and_claw.move(-127);
         } else {
-            intake_and_wrist.move(0);
+            intake_and_claw.move(0);
         }
     }
 }
 
-
+    
 // while (true) {
-// 		pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
-// 		                 (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
-// 		                 (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);  // Prints status of the emulated screen LCDs
+//      pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
+//                       (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
+//                       (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);  // Prints status of the emulated screen LCDs
 
-// 		// Arcade control scheme
-// 		int dir = master.get_analog(ANALOG_LEFT_Y);    // Gets amount forward/backward from left joystick
-// 		int turn = master.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
-// 		left_mg.move(dir - turn);                      // Sets left motor voltage
-// 		right_mg.move(dir + turn);                     // Sets right motor voltage
-// 		pros::delay(20);                               // Run for 20 ms then update
-// 	}
+//      // Arcade control scheme
+//      int dir = master.get_analog(ANALOG_LEFT_Y);    // Gets amount forward/backward from left joystick
+//      int turn = master.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
+//      left_mg.move(dir - turn);                      // Sets left motor voltage
+//      right_mg.move(dir + turn);                     // Sets right motor voltage
+//      pros::delay(20);                               // Run for 20 ms then update
+//  }
 // }
