@@ -86,7 +86,55 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {}
+void autonomous() {
+
+    int wrist_start = 0;
+    int wrist_pickup = 0;
+    int wrist_score = 0;
+
+    int cascades_start = 0;
+    int cascades_pickup = 0;
+    int cascades_score = 0;
+
+    int claw_pickup = 0;
+    int claw_drop = 0;
+
+    chassis.setPose(0, -60, 90); //Starting position
+
+    chassis.moveToPose(0, -45, 90, 500); //Hit toggle
+    chassis.moveToPose(0, -60, 90, 400); //Back up
+    chassis.moveToPose(0, -45, 90, 400); //Hit toggle again
+
+    chassis.moveToPose(24, -48, 173, 700); //Go to alliance goal
+
+    cascades.move_absolute(cascades_score, 100);
+    wrist.move_absolute(wrist_score, 100);
+    intake_and_claw.move_absolute(claw_drop, 100);
+
+    chassis.moveToPose(48, -48, 180, 600); //Go to first pin
+
+    cascades.move_absolute(cascades_pickup, 100);
+    wrist.move_absolute(wrist_pickup, 100);
+    intake_and_claw.move_absolute(claw_pickup, 100);
+
+    chassis.moveToPose(24, -48, 180, 600); //Go back to alliance goal
+
+    cascades.move_absolute(cascades_score, 100);
+    wrist.move_absolute(wrist_score, 100);
+    intake_and_claw.move_absolute(claw_drop, 100);
+
+    chassis.moveToPose(24, -24, 270, 600); //Go to second pin
+
+    cascades.move_absolute(cascades_pickup, 100);
+    wrist.move_absolute(wrist_pickup, 100);
+    intake_and_claw.move_absolute(claw_pickup, 100);
+
+    chassis.moveToPose(24, -48, 270, 600); //Go back to alliance goal
+
+    cascades.move_absolute(cascades_score, 100);
+    wrist.move_absolute(wrist_score, 100);
+    intake_and_claw.move_absolute(claw_drop, 100);
+}
 
 /**
  * Runs the operator control code. This function will be started in its own task
