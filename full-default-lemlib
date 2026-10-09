@@ -91,7 +91,7 @@ void autonomous() {
 
     int wrist_start = 0;
     int wrist_pickup = 800; 
-    int wrist_score = 1200; 
+    int wrist_score = 900;  // if not working then 1200
 
     int cascade_start = 0;
     int cascade_pickup = 80;
@@ -103,24 +103,23 @@ void autonomous() {
     chassis.setPose(0, -60, 0); //Starting position
 
     chassis.moveToPoint(0, -45, 1000); //Hit toggle
-    chassis.moveToPoint(0, -60, 1000,{.forwards = false});
+    chassis.moveToPoint(0, -60, 1000,{.forwards = false}); //Go back
     chassis.moveToPoint(0, -45, 1000); //Hit toggle again
-    chassis.moveToPoint(0, -75, 1000,{.forwards = false});
-    // chassis.moveToPoint(19, -48, 3000,{.forwards = false}); //Go to alliance goal
+    chassis.moveToPoint(0, -75, 1000,{.forwards = false}); //Go back a bit more
+    // chassis.moveToPoint(19, -48, 3000,{.forwards = false}); 
     // chassis.moveToPoint(35, -48, 1800);
-    cascades.move_absolute(cascade_score, 1000);
-    wrist.move_absolute(wrist_score, 1000);
+    // cascades.move_absolute(cascade_score, 1000); //Get cascade
+    wrist.move_absolute(wrist_score, 1000); // Moves wrist up
+    pros::delay(1000);
+    chassis.turnToHeading(chassis.getPose().theta - 145, 1000); // Turns the robot
+    chassis.waitUntilDone(); // Waits 
 
-    chassis.turnToHeading(chassis.getPose().theta - 145, 1000);
-    chassis.waitUntilDone();
+    lemlib::Pose p = chassis.getPose(); // Gets pose for going straight backwards
+    float h = p.theta * M_PI / 180; // Continuation setup
+    chassis.moveToPoint(p.x - 45 * sin(h), p.y - 45 * cos(h), 2000, {.forwards = false, .maxSpeed = 75}); // Goes backwards
 
-    lemlib::Pose p = chassis.getPose();
-    float h = p.theta * M_PI / 180;
-    chassis.moveToPoint(p.x - 45 * sin(h), p.y - 45 * cos(h), 2000, {.forwards = false, .maxSpeed = 75});
-
-    intake_and_claw.move_absolute(1000, 1000);
-    pros::delay(2000);
-    intake_and_claw.move(-127);
+    pros::delay(2000); // Wait
+    intake_and_claw.move(-127); // Drop pin
     // cascades.move_absolute(cascade_score, 1000);
     // wrist.move_absolute(wrist_score, 1000);
     // intake_and_claw.move_absolute(claw_drop, 1000);
